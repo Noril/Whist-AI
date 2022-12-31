@@ -10,12 +10,21 @@ from typing import List
 
 FACES = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', ]
 
-face_value = {'A': 4.5,
-              'K': 3,
-              'Q': 1.5,
-              'J': 0.75,
-              'T': 0.25,
-              '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0, '9': 0}
+face_value = {
+    '2': {'not_trump': 1, 'trump': 4},
+    '3': {'not_trump': 1, 'trump': 4},
+    '4': {'not_trump': 1, 'trump': 4},
+    '5': {'not_trump': 1, 'trump': 4},
+    '6': {'not_trump': 1, 'trump': 4},
+    '7': {'not_trump': 2, 'trump': 6},
+    '8': {'not_trump': 2, 'trump': 6},
+    '9': {'not_trump': 2, 'trump': 6},
+    'T': {'not_trump': 3, 'trump': 8},
+    'J': {'not_trump': 4, 'trump': 10},
+    'Q': {'not_trump': 8, 'trump': 20},
+    'K': {'not_trump': 14, 'trump': 30},
+    'A': {'not_trump': 20, 'trump': 40}
+}
 
 
 SUITS = ['♠', '♥', '♦', '♣', ]
@@ -283,6 +292,13 @@ class Hand:
                 else:
                     sorted_hand[card.suit.suit_type] = sorted_suit
         return sorted_hand, trump
+    
+    def get_bid_value(self):
+        bid_value = 0
+        for card in self.cards:
+            bid_value += face_value[card.face]['trump' if card.is_trump else 'not_trump']
+
+        return bid_value
 
     def get_hand_value(self, already_played):
         """
@@ -306,8 +322,8 @@ class Hand:
                 card_of_suit = self.get_cards_from_suite(card.suit, already_played)
                 if len(card_of_suit) > 0:
                     adjust_suit_lenght += max([0, len(card_of_suit) - 4])
-                values_of_card = [face_value[card.face] for card in card_of_suit
-                                  if face_value[card.face] != 0]
+                values_of_card = [face_value[card.face]['not_trump'] for card in card_of_suit
+                                  if face_value[card.face]['not_trump'] != 0]
                 hand_values_by_suits[card.suit.suit_type] = values_of_card
 
         for suit, values in hand_values_by_suits.items():

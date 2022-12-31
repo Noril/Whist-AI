@@ -8,7 +8,7 @@ from typing import Dict, List, Set
 
 from cards import Card
 from game import SimulatedGame
-from players import is_players_in_same_team, get_legal_actions, PLAYERS_CYCLE
+from players import get_legal_actions, PLAYERS_CYCLE
 from state import State
 
 simple_func_names = [
@@ -19,6 +19,7 @@ simple_func_names = [
     'hard_long_greedy_action',
     'soft_short_greedy_action',
     'soft_long_greedy_action',
+    'whist_action'
 ]
 
 simple_agent_names = [
@@ -29,6 +30,7 @@ simple_agent_names = [
     'HardLongGreedy',
     'SoftShortGreedy',
     'SoftLongGreedy',
+    'Whist'
 ]
 
 ab_evaluation_func_names = [
@@ -141,6 +143,7 @@ def highest_first_action(state):
 
 def hard_short_greedy_action(state):
     """
+    If first to play, play the highest value action.
     If can beat current trick cards - picks highest value action available.
     If cannot - picks lowest value action.
     :param State state:
@@ -162,6 +165,11 @@ def hard_short_greedy_action(state):
 
 def hard_long_greedy_action(state):
     """
+    Basically, same as hard_short_greedy_action but with knowledge of opponents' hands.
+    If first to play, play either:
+    * the highest winning card against all hands of other players, if any
+    * the highest card of a suit that other players don't have, if any
+    * the lowest value action.
     If can beat current trick cards - picks highest value action available.
     If cannot - picks lowest value action.
     :param State state:
@@ -221,6 +229,11 @@ def soft_short_greedy_action(state):
 
 def soft_long_greedy_action(state):
     """
+    Basically, same as soft_short_greedy_action but with knowledge of opponents' hands.
+    If first to play, play either:
+    * the lowest winning card against all hands of other players, if any
+    * the lowest card of a suit that other players don't have, if any
+    * the lowest value action.
     If can beat current trick cards - picks the lowest value action available
     that can become the current best in trick.
     If cannot - picks lowest value action.
@@ -257,10 +270,18 @@ def soft_long_greedy_action(state):
     # Cannot win - play worst action.
     return worst_move
 
+def whist_action(state):
+    if sum(state.bids.values()) > state.cards_in_hand:
+        # People want to win many tricks, so you have to keep your best cards to fight
+        return soft_long_greedy_action(state)
+    else:
+        # People don't want to win too many tricks, so high cards are a risk
+        return hard_long_greedy_action(state)
+
 
 def get_opponents_legal_card(state):
     """
-    used unly in case the trick is initialized and the current player in the trick has an
+    used only in case the trick is initialized and the current player in the trick has an
     opponent that will play the trick later.
     :param state:
     :return: the cards of the opponent of the current player
@@ -275,70 +296,54 @@ def get_opponents_legal_card(state):
 
 def starting_trick_cards(state):
     """
-    pick the cards for openning the trick, trying to win it.
+    pick the cards for opening the trick, trying to win it.
     The list will hold the following cards:
-    If current player has a winning card against all other hands of player.
-    If the teammate of the current player has a winning card of a suit the current player will play
+    If current player has a winning card against all hands of other players.
     If the other players has no cards in the suit
-    If the other teammate doesn't have cards in suit but can win against other trumps
     :param state:
     :return:
     """
     curr_player_moves = state.get_legal_actions()
 
     # all opponent's hands united to single list of cards to observe
-    opp_reg_cards, opp_trump_cards, teammate_reg_cards, teammate_trump_cards = \
-        get_hand_trump_opponent_teammate(state)
+    opp_reg_cards, opp_trump_cards = get_hand_trump_opponents(state)
 
     cards = []
     for card in curr_player_moves:
-        # the opponent has cards of the current suit. trump cards are part of legal cards,
+        # the opponents have cards of the current suit. Trump cards are part of legal cards,
         # hence the highest card is both from the suit or from trump card.
         if opp_reg_cards.get(card.suit.suit_type) is not None:
             best_curr = card
-            if len(teammate_trump_cards) > 0:
-                best_curr = max([teammate_trump_cards[-1], card])
-            if teammate_reg_cards.get(card.suit.suit_type):
-                best_curr = max([teammate_reg_cards[card.suit.suit_type][-1], best_curr])
             best_opp = opp_reg_cards[card.suit.suit_type][-1]
             if len(opp_trump_cards) > 0:
                 best_opp = max(best_opp, opp_trump_cards[-1])
-            # if the best card of curr team is winning against the strongest legal card of the
-            # opponent- the card suggested to open the trick
+            # if the best card of curr player is winning against the strongest legal card of the
+            # opponents - the card suggested to open the trick
             if best_curr > best_opp:
                 cards.append(card)
         else:
-            # the opponent has no cards of the suit. hence he will play trump card or a card
-            # from other suit. only trump card could possibly win the trick
-            if len(teammate_trump_cards) > 0:
-                if len(opp_trump_cards) > 0:
-                    best_curr = teammate_trump_cards[-1]
-                    best_opp = opp_trump_cards[-1]
-                    if best_curr > best_opp:
-                        cards.append(card)
-                else:
-                    cards.append(card)
-            else:
-                if not len(opp_trump_cards) > 0:
-                    cards.append(card)
+            # the opponents have no cards of the suit. Hence they will play trump card or a card
+            # from other suit. Only trump card could possibly win the trick
+            if not len(opp_trump_cards) > 0:
+                cards.append(card)
     return cards
 
 
-def get_hand_trump_opponent_teammate(state):
+def get_hand_trump_opponents(state):
     opp1 = state.players_pos[PLAYERS_CYCLE[state.curr_player.position]]
-    teammate = state.players_pos[PLAYERS_CYCLE[opp1.position]]
-    opp2 = state.players_pos[PLAYERS_CYCLE[teammate.position]]
+    opp2 = state.players_pos[PLAYERS_CYCLE[opp1.position]]
+    opp3 = state.players_pos[PLAYERS_CYCLE[opp2.position]]
 
     # the following hands are sorted. 1st card is the smallest
     opp1_reg_cards, opp1_trump_cards = opp1.hand.get_cards_sorted_by_suits(state.already_played)
     opp2_reg_cards, opp2_trump_cards = opp2.hand.get_cards_sorted_by_suits(state.already_played)
+    opp3_reg_cards, opp3_trump_cards = opp3.hand.get_cards_sorted_by_suits(state.already_played)
     opp1_reg_cards.update(opp2_reg_cards)
+    opp1_reg_cards.update(opp3_reg_cards)
     opp_reg_cards = opp1_reg_cards
-    opp_trump_cards = opp1_trump_cards + opp2_trump_cards
+    opp_trump_cards = opp1_trump_cards + opp2_trump_cards + opp3_trump_cards
 
-    teammate_reg_cards, teammate_trump_cards = teammate.hand.get_cards_sorted_by_suits(
-        state.already_played)
-    return opp_reg_cards, opp_trump_cards, teammate_reg_cards, teammate_trump_cards
+    return opp_reg_cards, opp_trump_cards
 
 
 def add_randomness_to_action(func, epsilon):
@@ -437,24 +442,16 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         if is_max:
             for next_state in possible_states:
                 next_player = next_state.curr_player
-                is_next_max = True if is_players_in_same_team(curr_player, next_player) else False
-                next_depth = curr_depth if is_next_max else curr_depth + 1
-                if not is_next_max:
-                    b = min((b, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
-                else:
-                    a = max((a, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
+                next_depth = curr_depth + 1
+                b = min((b, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
                 if b <= a:
                     break
             return a
 
         for next_state in possible_states:
             next_player = next_state.curr_player
-            is_next_max = False if is_players_in_same_team(curr_player, next_player) else True
-            next_depth = curr_depth + 1 if is_next_max else curr_depth
-            if is_next_max:
-                a = max((a, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
-            else:
-                b = min((b, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
+            next_depth = curr_depth + 1
+            a = max((a, self.score(next_state, max_depth, next_depth, is_next_max, a, b)))
             if b <= a:
                 break
         return b
@@ -472,8 +469,6 @@ def is_target_reached_evaluation_function(state, is_max=True, target=None):
     """
     if not target:
         return 0
-    # if max return True if met the score of the team of the current player
-    # else return if the opposite team met the required score
     player_score = state.get_score(is_max)
     if target <= player_score:
         return 1
@@ -548,11 +543,7 @@ def greedy_legal_moves_count2(state):
             opponent_best = max(opponent_legal_cards)
             card_to_win = max([opponent_best, best_in_current_trick])
             wining_moves = list(filter(lambda move: move > card_to_win, legal_moves))
-            teammate = state.players_pos[PLAYERS_CYCLE[PLAYERS_CYCLE[state.curr_player.position]]]
-            teammate_legal_moves = get_legal_actions(state.trick.starting_suit, teammate, state.already_played)
-            teammate_wining_moves = list(filter(lambda move: move > card_to_win, teammate_legal_moves))
-            wining_moves_count = 2 * len(wining_moves) + len(teammate_wining_moves)
-            wining_moves_count = 1 if wining_moves_count > 0 else 0
+            wining_moves_count = 1 if len(wining_moves) > 0 else 0
         if i == 3:
             best_move = max(legal_moves)
             if best_move > best_in_current_trick:
@@ -619,9 +610,12 @@ class SimpleMCTSAgent(IAgent):
         best_action = np.random.choice(legal_actions)
 
         # Simulate games on separate threads
-        games = [SimulatedGame(SimpleAgent(self.action_chooser_function),
-                               SimpleAgent('random_action'), False,
-                               state, action) for action in rollout_actions]
+        games = [SimulatedGame([
+            SimpleAgent(self.action_chooser_function),
+            SimpleAgent('random_action'),
+            SimpleAgent('random_action'),
+            SimpleAgent('random_action')
+        ], False, state, action) for action in rollout_actions]
         futures = [self.executor.submit(game.run) for game in games]
         futures_queue = Queue(num_simulations)
         for future in futures:
@@ -638,10 +632,7 @@ class SimpleMCTSAgent(IAgent):
 
         # Collect results
         for game in games:
-            assert game.winning_team != -1
-            winning_team = game.teams[game.winning_team]
-            if winning_team.has_player(state.curr_player):
-                self.action_value[game.starting_action] += 1
+            self.action_value[game.starting_action] += game.score[state.curr_player]
 
             self.num_simulations_total += 1
 
@@ -684,8 +675,6 @@ class PureMCTSAgent(SimpleMCTSAgent):
         self.action_chooser_function = lookup(action_chooser_function,
                                               globals())
         super().__init__(action_chooser_function, num_simulations)
-        # self.root = None  # type: MCTSNode
-        self.root = None  # type: MCTSNode
 
     def get_action(self, state):
         if not state.prev_tricks:
@@ -835,20 +824,16 @@ class MCTSNode:
         self.children = []
         if not self.parent:  # Is root node
             self.parent_action = None
-            if self.state.teams[0].has_player(self.state.curr_player):
-                self.team = self.state.teams[0]
-            else:
-                self.team = self.state.teams[1]
-
+            self.player = state.curr_player
         else:
-            self.team = parent.team
+            self.player = parent.player
             self.parent_action = parent_action
 
         self._number_of_visits = 0.
-        self._results = defaultdict(lambda: 0)  # type: Dict[int, int]  # maps team# to no. of wins
+        self._results = []
         self._untried_actions = None  # type: Set[Card]
         self._tried_actions = set()  # type: Set[Card]
-        self.max_player = 1 if self.team.has_player(self.state.curr_player) else -1
+        self.max_player = 1 if state.curr_player == self.player else -1
         self.player_pos = state.curr_player.position
 
 
@@ -897,9 +882,7 @@ class MCTSNode:
     def q_value(self) -> int:
         """ Difference between wins and losses count for current node"""
 
-        wins = self._results[self.max_player]
-        loses = self._results[-1 * self.max_player]
-        return wins - loses
+        return sum(self._results)
 
     @property
     def num_visits(self) -> float:
@@ -933,19 +916,21 @@ class MCTSNode:
             i.e. simulates a single game with current state as initial state. """
 
         if self.is_terminal:
-            reward = 1 if self.team.has_player(self.state.curr_player) else -1
+            reward = self.state.score[self.state.curr_player]
             return reward
 
         current_rollout_state = self.state
         possible_moves = current_rollout_state.get_legal_actions()
         action = self.rollout_policy(possible_moves)
-        game = SimulatedGame(SimpleAgent(self.action_chooser_func),
-                             SimpleAgent('random_action'), False,
-                             current_rollout_state, action)
+        game = SimulatedGame([
+            SimpleAgent(self.action_chooser_func),
+            SimpleAgent('random_action'),
+            SimpleAgent('random_action'),
+            SimpleAgent('random_action')
+        ], False, current_rollout_state, action)
         assert game.run()
-        winning_team_idx = game.winning_team
-        winning_team = current_rollout_state.teams[winning_team_idx]
-        reward = 1 if self.team == winning_team else -1
+        
+        reward = game.score[self.player]
         return reward
 
     @property
@@ -955,19 +940,19 @@ class MCTSNode:
 
     def backpropagate(self, result) -> None:
         """
-        Backpropogates result of single rollout up the tree.
-        :param int result: 1 if max player won in rollout, -1 if min player won.
+        Backpropagates result of single rollout up the tree.
+        :param int result: score.
         """
 
         self._number_of_visits += 1.
-        self._results[result] += 1.
+        self._results.append(result)
         if self.parent is not None:
             self.parent.backpropagate(result)
 
 # ---------------------------------HumanAgent-------------------------------- #
 class HumanAgent(IAgent):
     """
-    Ask user for action, in format of <face><suit>.
+    Ask user for action, in format of <suit><face>.
     <face> can be entered as a number or a lowercase/uppercase letter.
     <suit> can be entered as an ASCII of suit or a lowercase/uppercase letter.
     """
@@ -977,6 +962,7 @@ class HumanAgent(IAgent):
 
     def get_action(self, state):
         while True:
+            print("What card do you want to play? Format: <suit><face>.")
             inp = input()
             if inp == '':
                 print(f"<EnterKey> is not a valid action, try again")

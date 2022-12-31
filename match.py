@@ -30,24 +30,22 @@ class Match:
     """ Represents a series of games of bridge, with same opponents."""
 
     def __init__(self,
-                 agent: IAgent,
-                 other_agent: IAgent,
+                 agents: List[IAgent],
                  num_games: int,
                  verbose_mode: bool = True,
                  cards_in_hand: int = 13):
-        self.agent = agent
-        self.other_agent = other_agent
+        self.agents = agents
         self.num_games = num_games
         self.verbose_mode = verbose_mode
         self.cards_in_hand = cards_in_hand
 
-        self.games_counter: List[int] = [0, 0, ]  # [Team 0, Team 1]
+        self.games_counter: List[int] = [0, 0, 0, 0]
 
     def __str__(self):
         ret = ""
 
         ret += f"Total score: " \
-               f"{self.games_counter[0]:02} - {self.games_counter[1]:02}\n"
+               f"{self.games_counter[0]}  {self.games_counter[1]}  {self.games_counter[2]}  {self.games_counter[3]}\n"
 
         return ret
 
@@ -60,31 +58,33 @@ class Match:
         start_t = perf_counter()
         for _ in tqdm(range(self.num_games),
                       leave=False, disable=self.verbose_mode, file=sys.stdout):
-            curr_game = create_game(self.agent, self.other_agent,
-                                    self.games_counter, self.verbose_mode,
+            curr_game = create_game(self.agents, self.games_counter, self.verbose_mode,
                                     cards_in_hand=self.cards_in_hand)
             curr_game.run()
-            self.games_counter[curr_game.winning_team] += 1
+            for i, player in enumerate(curr_game.players.values()):
+                self.games_counter[i] += curr_game.score[player]
         end_t = perf_counter()
         if self.verbose_mode:
-            os.system('clear' if 'linux' in sys.platform else 'cls')
+            #os.system('clear' if 'linux' in sys.platform else 'cls')
             print(self)
         print(self)
         print(f"Total time for match: {end_t - start_t} seconds; "
               f"Average {(end_t - start_t) / float(self.num_games)} "
               f"seconds per game")
+        
+        return self.games_counter
 
 
-def create_game(agent, other_agent, games_counter, verbose_mode,
+def create_game(agents, games_counter, verbose_mode,
                 from_db=False, cards_in_hand=13):
     """ Returns Game object, either new random game or a game initialized from game DB"""
     if from_db:
         pass
     # todo(maryna): create single game from db. pay attention to players
     #  initialization + the iterator.
-    trick_counter = [0, 0, ]  # [Team 0, Team 1]
+    trick_counter = [0, 0, 0, 0]
     previous_tricks = []
-    game = Game(agent, other_agent, games_counter, trick_counter, verbose_mode,
+    game = Game(agents, games_counter, trick_counter, verbose_mode,
                 previous_tricks, Trick({}), cards_in_hand=cards_in_hand)
     return game
 
@@ -94,6 +94,8 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--agent1', required=True)
     parser.add_argument('--agent2', required=True)
+    parser.add_argument('--agent3', required=True)
+    parser.add_argument('--agent4', required=True)
     parser.add_argument('--num_games', type=int, default=100)
     parser.add_argument('--cards_in_hand', type=int, default=13)
     parser.add_argument('--verbose_mode', type=int, default=1)
@@ -154,32 +156,23 @@ def str_to_agent(agent_str):
         raise ArgumentTypeError()
 
 
-def run_match():
+def run_match(agent1, agent2, agent3, agent4, num_games=1, verbose_mode=True, cards_in_hand=13):
     try:
-        a0 = str_to_agent(args.agent1)
-        a1 = str_to_agent(args.agent2)
+        a0 = str_to_agent(agent1)
+        a1 = str_to_agent(agent2)
+        a2 = str_to_agent(agent3)
+        a3 = str_to_agent(agent4)
     except ArgumentTypeError:
         print("ArgumentTypeError: Bad arguments usage", file=sys.stderr)
-        print(f"USAGE: run with the following arguments - ", file=sys.stderr)
-        print("   python3.7 match.py --agent1 <agent> --agent2 <agent> [--cards_in_hand <int> --num_games <int> --verbose_mode <int> --seed <int>]\n"
-                "Where each agent encoding is of in one of the following forms:\n"
+        print("Each agent encoding is of in one of the following forms:\n"
                 "* Simple-<simple_agent_names>\n"
                 "* AlphaBeta-<ab_evaluation_agent_names>-<depth>\n"
                 "* MCTS-<'simple'/'stochastic'/'pure'>-<simple_agent_names>-<num_simulations>\n"
                 "* Human", file=sys.stderr)
         exit(1)
 
-    match = Match(agent=a0,
-                  other_agent=a1,
-                  num_games=args.num_games,
-                  verbose_mode=bool(args.verbose_mode),
-                  cards_in_hand=args.cards_in_hand)
-    match.run()
-
-
-if __name__ == '__main__':
-    args = parse_args()
-    if args.seed >= 0:
-        np.random.seed(args.seed)
-    run_match()
-    input("Press Enter button to exit")
+    match = Match(agents=[a0, a1, a2, a3],
+                  num_games=num_games,
+                  verbose_mode=verbose_mode,
+                  cards_in_hand=cards_in_hand)
+    return match.run()
