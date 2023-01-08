@@ -76,16 +76,15 @@ class Match:
 
 
 def create_game(agents, games_counter, verbose_mode,
-                from_db=False, cards_in_hand=13):
+                from_db=False, cards_in_hand=13, hands_already_dealt=[]):
     """ Returns Game object, either new random game or a game initialized from game DB"""
     if from_db:
         pass
-    # todo(maryna): create single game from db. pay attention to players
-    #  initialization + the iterator.
     trick_counter = [0, 0, 0, 0]
     previous_tricks = []
     game = Game(agents, games_counter, trick_counter, verbose_mode,
-                previous_tricks, Trick({}), cards_in_hand=cards_in_hand)
+                previous_tricks, Trick({}), cards_in_hand=cards_in_hand,
+                hands_already_dealt=hands_already_dealt)
     return game
 
 

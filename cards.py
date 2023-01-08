@@ -177,6 +177,10 @@ class Card:
         new_card.is_trump = self.is_trump
         return new_card
 
+    def short_str(self):
+        suit_str = (list(SUITS_ALT.keys())[list(SUITS_ALT.values()).index(self.suit)])
+        return f"{suit_str}{self.face}"
+
     def __repr__(self):
         return f"{self.face}{self.suit}"
 
@@ -223,19 +227,30 @@ class Deck:
                 card = Card(face, suit, self.trump)
                 self.cards.append(card)
 
-    def deal(self, cards_in_hand=13, recreate_game=''):
+    def deal(self, cards_in_hand=13, hands_already_dealt=[]):
         """
         Returns 4 randomly dealt Hands, one for each player in the game.
-        :param recreate_game: if supplied, will allow recreating a set of hands from a database. Currently unsupported.
+        :param hands_already_dealt: list of card IDs ('C9', ...) - if supplied, will allow random choice for undealt hands
         :returns List[Hand]: 4 hands
         """
-        if not recreate_game:
-            cards = np.random.choice(self.cards, 4*cards_in_hand, replace=False)
+        hands = []
+        for hand in hands_already_dealt:
+            cards = []
+            for card_id in hand:
+                card_suit, card_number = card_id[:-1], card_id[-1]
+                card = Card(card_number, card_suit, self.trump)
+                self.cards.remove(card)
+                cards.append(card)
+            hands.append(Hand(cards))
+
+        left_to_deal = 4 - len(hands)
+        for _ in range(left_to_deal):
+            cards = np.random.choice(self.cards, left_to_deal*cards_in_hand, replace=False)
             shuffled_deck = \
-                np.random.permutation(cards).reshape(4, cards_in_hand).tolist()
-            hands = [Hand(cards) for cards in shuffled_deck]
-            return hands
-        # todo(oriyan/mar): create new deck from database representation
+                np.random.permutation(cards).reshape(left_to_deal, cards_in_hand).tolist()
+            hands += [Hand(cards) for cards in shuffled_deck]
+        
+        return hands
 
 
 class Hand:

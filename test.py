@@ -9,7 +9,7 @@ def test_agents(agents, num_games=100):
     results = {"{}.{}".format(agent, idx): 0 for idx, agent in agents_dict.items()}
 
     for i in range(num_games):
-        print("{}/{}".format(i+1, num_games), end="\r")
+        print("{}/{}".format(i+1, num_games))
         order = [0, 1, 2, 3]
         random.shuffle(order)
 
@@ -27,12 +27,14 @@ def test_agents(agents, num_games=100):
         for i in range(4):
             results["{}.{}".format(agents_dict[order[i]], order[i])] += result[i]
 
+        print(results)
+
     return results
 
 if __name__ == '__main__':
     test_agents([
         'MCTS-pure-Whist-500',
-        'Simple-Random',
+        'MCTS-pure-Random-500',
         'Simple-Random',
         'Simple-Random'
     ])

@@ -4,7 +4,7 @@ import numpy as np
 from copy import copy
 from typing import List
 
-from cards import Deck, TrumpType
+from cards import Deck, TrumpType, Card
 from players import POSITIONS, Player, PositionEnum
 from state import State
 from trick import Trick
@@ -20,9 +20,8 @@ class Game:
                  curr_trick: Trick = None,
                  starting_pos: PositionEnum = None,
                  trump=None,
-                 cards_in_hand=13):
-        # todo(oriyan/maryna): think how to reproduce game from database -
-        #  or randomly generate new game
+                 cards_in_hand=13,
+                 hands_already_dealt=[]):
         self.cards_in_hand=cards_in_hand
         self.agents = agents  # type: IAgent
         self.games_counter = games_counter
@@ -36,7 +35,10 @@ class Game:
             trump = TrumpType.from_str(trump)
         self.trump = trump  # type: TrumpType
         self.deck = Deck(self.trump)
-        hands = self.deck.deal(cards_in_hand=cards_in_hand)
+        hands = self.deck.deal(
+            cards_in_hand=cards_in_hand,
+            hands_already_dealt=hands_already_dealt
+        )
         self.players = {pos: Player(pos, hand) for pos, hand in
                         zip(POSITIONS, hands)}
         
@@ -224,7 +226,7 @@ class Game:
             else:
                 self.score[player] -= abs(tricks_won - bid)
 
-    def play_single_move(self) -> None:
+    def play_single_move(self) -> Card:
         """
         Called when its' the given player's turn. The player will pick a
         action to play and it will be taken out of his hand a placed into the
@@ -237,6 +239,7 @@ class Game:
         self.curr_trick = self._state.apply_action(card, True)
         self.curr_player = self._state.curr_player  # Current player of state is trick winner
         self.tricks_counter = {player: self._state.tricks_counter[player] for player in self.players.values()}
+        return card
 
     def show(self) -> None:
         """
